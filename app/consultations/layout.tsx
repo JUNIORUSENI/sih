@@ -2,13 +2,13 @@ import { requireAnyRole } from "@/lib/auth-actions";
 import { AppSidebar } from "@/components/shared/app-sidebar";
 import { AppNavbar } from "@/components/shared/app-navbar";
 
-export default async function MedicalLayout({
+export default async function ConsultationsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Vérifier que l'utilisateur a les rôles requis pour accéder à cette section
-  await requireAnyRole(["DOCTOR", "GENERAL_DOCTOR"], "/protected");
+  // Vérifier que l'utilisateur a accès à cette section
+  await requireAnyRole(["DOCTOR", "NURSE", "GENERAL_DOCTOR", "ADMIN_SYS"], "/protected");
 
   const menuItems = [
     {
@@ -22,36 +22,21 @@ export default async function MedicalLayout({
       icon: "Users",
     },
     {
-      title: "Hospitalisations",
-      href: "/hospitalizations",
-      icon: "Activity",
-    },
-    {
-      title: "Urgences",
-      href: "/emergencies",
-      icon: "AlertCircle",
-    },
-    {
       title: "Prescriptions",
       href: "/prescriptions",
       icon: "Pill",
-    },
-    {
-      title: "Rapports",
-      href: "/reports",
-      icon: "ClipboardList",
     },
   ];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <AppSidebar
-        title="Interface"
-        subtitle="Médicale"
+      <AppSidebar 
+        title="Espace"
+        subtitle="Consultations"
         menuItems={menuItems}
         homeHref="/medical"
       />
-      <AppNavbar title="Espace Médical" />
+      <AppNavbar title="Gestion des Consultations" />
       
       <main className="ml-64 mt-16 p-8">
         <div className="max-w-full">

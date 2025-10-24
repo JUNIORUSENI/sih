@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/auth-actions";
-import { AdminLayout } from "@/components/admin/admin-layout";
 import { CentreManagement } from "@/components/admin/centre-management";
 
 export default async function CentresPage() {
@@ -11,9 +10,5 @@ export default async function CentresPage() {
     redirect("/auth/login");
   }
 
-  return (
-    <AdminLayout>
-      <CentreManagement />
-    </AdminLayout>
-  );
+  return <CentreManagement />;
 }

@@ -72,7 +72,7 @@ export function getRoleDescription(role: string): string {
     case 'ADMIN_SYS':
       return 'Administrateur Système';
     case 'GENERAL_DOCTOR':
-      return 'Médecin Généraliste';
+      return 'Médecin Général';
     case 'DOCTOR':
       return 'Médecin Spécialiste';
     case 'NURSE':

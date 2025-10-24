@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { isAuthenticated, hasAnyRole } from "@/lib/auth-actions";
-import { MedicalLayout } from "@/components/medical/medical-layout";
 import { ReportingSystem } from "@/components/medical/reporting-system";
 
 export default async function ReportingPage() {
@@ -12,9 +11,5 @@ export default async function ReportingPage() {
     redirect("/auth/login");
   }
 
-  return (
-    <MedicalLayout>
-      <ReportingSystem />
-    </MedicalLayout>
-  );
+  return <ReportingSystem />;
 }

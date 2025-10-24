@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { isAuthenticated, hasAnyRole } from "@/lib/auth-actions";
-import { MedicalLayout } from "@/components/medical/medical-layout";
 import { HospitalizationDetail } from "@/components/medical/hospitalization-detail";
 
 export default async function HospitalizationPage({ params }: { params: { id: string } }) {
@@ -12,9 +11,5 @@ export default async function HospitalizationPage({ params }: { params: { id: st
     redirect("/auth/login");
   }
 
-  return (
-    <MedicalLayout>
-      <HospitalizationDetail hospitalizationId={params.id} />
-    </MedicalLayout>
-  );
+  return <HospitalizationDetail hospitalizationId={params.id} />;
 }

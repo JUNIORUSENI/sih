@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { isAuthenticated, hasAnyRole } from "@/lib/auth-actions";
-import { SecretaryLayout } from "@/components/secretary/secretary-layout";
 import { AppointmentManagement } from "@/components/appointment/appointment-management";
 
 export default async function AppointmentsPage() {
@@ -12,9 +11,5 @@ export default async function AppointmentsPage() {
     redirect("/auth/login");
   }
 
-  return (
-    <SecretaryLayout>
-      <AppointmentManagement />
-    </SecretaryLayout>
-  );
+  return <AppointmentManagement />;
 }

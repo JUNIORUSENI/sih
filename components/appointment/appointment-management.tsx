@@ -483,7 +483,7 @@ export function AppointmentManagement() {
                     {appointment.doctor ? (
                       <div>
                         <p>{appointment.doctor.first_name} {appointment.doctor.last_name}</p>
-                        <p className="text-xs text-muted-foreground">{appointment.doctor.role === 'GENERAL_DOCTOR' ? 'Médecin Généraliste' : 'Médecin Spécialiste'}</p>
+                        <p className="text-xs text-muted-foreground">{appointment.doctor.role === 'GENERAL_DOCTOR' ? 'Médecin Général' : 'Médecin Spécialiste'}</p>
                       </div>
                     ) : (
                       <span className="text-muted-foreground">Non assigné</span>

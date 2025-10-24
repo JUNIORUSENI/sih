@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/auth-actions";
-import { StaffManagement } from "@/components/admin/staff-management";
+import { StatisticsOverview } from "@/components/admin/statistics-overview";
 
-export default async function StaffPage() {
+export default async function StatisticsPage() {
   // Vérifier si l'utilisateur est un admin
   const admin = await isAdmin();
   
@@ -10,5 +10,5 @@ export default async function StaffPage() {
     redirect("/auth/login");
   }
 
-  return <StaffManagement />;
+  return <StatisticsOverview />;
 }

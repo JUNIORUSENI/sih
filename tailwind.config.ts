@@ -51,6 +51,22 @@ export default {
           "4": "hsl(var(--chart-4))",
           "5": "hsl(var(--chart-5))",
         },
+        // Couleurs personnalisées du projet
+        navy: {
+          DEFAULT: "#14213D",
+          light: "#1a2d56",
+          dark: "#0f1929",
+        },
+        gold: {
+          DEFAULT: "#FCA311",
+          light: "#ffb534",
+          dark: "#e3920e",
+        },
+        hover: {
+          DEFAULT: "#E5E5E5",
+          light: "#f5f5f5",
+          dark: "#d4d4d4",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

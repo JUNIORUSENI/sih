@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/auth-actions";
-import { AdminLayout } from "@/components/admin/admin-layout";
 import { AuditLogViewer } from "@/components/admin/audit-log-viewer";
 
 export default async function AuditPage() {
@@ -11,9 +10,5 @@ export default async function AuditPage() {
     redirect("/auth/login");
   }
 
-  return (
-    <AdminLayout>
-      <AuditLogViewer />
-    </AdminLayout>
-  );
+  return <AuditLogViewer />;
 }

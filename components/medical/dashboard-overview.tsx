@@ -12,11 +12,15 @@ import {
   AlertTriangle, 
   FileText, 
   Calendar, 
-  Activity
+  Activity,
+  TrendingUp,
+  ArrowRight
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import { toast } from "sonner";
+import { ErrorDisplay } from "@/components/ui/error-display";
 
 interface Patient {
   id: string;
@@ -52,28 +56,21 @@ interface Consultation {
   patient: Patient;
 }
 
-interface Prescription {
-  id: string;
-  created_at: string;
-  medication_name: string;
-  patient: Patient;
-}
-
 export function DashboardOverview() {
   const [stats, setStats] = useState({
     totalPatients: 0,
     activeHospitalizations: 0,
     pendingEmergencies: 0,
     pendingConsultations: 0,
-    newPrescriptions: 0
+    todayAppointments: 0
   });
   
   const [recentHospitalizations, setRecentHospitalizations] = useState<Hospitalization[]>([]);
   const [recentEmergencies, setRecentEmergencies] = useState<Emergency[]>([]);
   const [recentConsultations, setRecentConsultations] = useState<Consultation[]>([]);
-  const [recentPrescriptions, setRecentPrescriptions] = useState<Prescription[]>([]);
   
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   const router = useRouter();
   const supabase = createClient();
@@ -84,215 +81,130 @@ export function DashboardOverview() {
 
   const fetchDashboardData = async () => {
     try {
+      setError(null);
+      
       // Récupérer les statistiques
       const [
         patientsResult,
         hospitalizationsResult,
         emergenciesResult,
         consultationsResult,
-        prescriptionsResult
+        appointmentsResult
       ] = await Promise.all([
-        // Total des patients
         supabase.from('patients').select('*', { count: 'exact', head: true }),
-        
-        // Hospitalisations actives
-        supabase
-          .from('hospitalisations')
-          .select('*', { count: 'exact', head: true })
-          .is('discharge_date', null),
-        
-        // Urgences en attente
-        supabase
-          .from('emergencies')
-          .select('*', { count: 'exact', head: true })
-          .is('discharge_time', null),
-        
-        // Consultations en attente
-        supabase
-          .from('consultations')
-          .select('*', { count: 'exact', head: true })
-          .in('status', ['PENDING', 'ONGOING']),
-        
-        // Nouvelles prescriptions (dernières 24h)
-        supabase
-          .from('prescriptions')
-          .select('*', { count: 'exact', head: true })
-          .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+        supabase.from('hospitalisations').select('*', { count: 'exact', head: true }).is('discharge_date', null),
+        supabase.from('emergencies').select('*', { count: 'exact', head: true }).is('discharge_time', null),
+        supabase.from('consultations').select('*', { count: 'exact', head: true }).in('status', ['PENDING', 'ONGOING']),
+        supabase.from('appointments').select('*', { count: 'exact', head: true })
+          .gte('start_time', new Date().toISOString().split('T')[0])
+          .lt('start_time', new Date(Date.now() + 86400000).toISOString().split('T')[0])
       ]);
 
-      // Récupérer les détails pour les listes récentes
-      const [
-        recentHospitalizationsResult,
-        recentEmergenciesResult,
-        recentConsultationsResult,
-        recentPrescriptionsResult
-      ] = await Promise.all([
-        // Hospitalisations récentes
+      // Récupérer les détails
+      const [hospitalizationsData, emergenciesData, consultationsData] = await Promise.all([
         supabase
           .from('hospitalisations')
-          .select(`
-            id,
-            patient_id,
-            admission_date,
-            discharge_date,
-            admission_reason,
-            patient:patients!patient_id(first_name, last_name, medical_record_number)
-          `)
+          .select('id, patient_id, admission_date, discharge_date, admission_reason, patients!patient_id(id, first_name, last_name, medical_record_number)')
           .order('admission_date', { ascending: false })
           .limit(5),
         
-        // Urgences récentes
         supabase
           .from('emergencies')
-          .select(`
-            id,
-            patient_id,
-            admission_time,
-            triage_level,
-            reason,
-            patient:patients!patient_id(first_name, last_name, medical_record_number)
-          `)
+          .select('id, patient_id, admission_time, triage_level, reason, patients!patient_id(id, first_name, last_name, medical_record_number)')
           .order('admission_time', { ascending: false })
           .limit(5),
         
-        // Consultations récentes
         supabase
           .from('consultations')
-          .select(`
-            id,
-            patient_id,
-            date,
-            status,
-            reason_for_visit,
-            patient:patients!patient_id(first_name, last_name, medical_record_number)
-          `)
+          .select('id, patient_id, date, status, reason_for_visit, patients!patient_id(id, first_name, last_name, medical_record_number)')
           .order('date', { ascending: false })
-          .limit(5),
-        
-        // Prescriptions récentes
-        supabase
-          .from('prescriptions')
-          .select(`
-            id,
-            created_at,
-            medication_name,
-            consultation:consultations!consultation_id(patient:patients!patient_id(first_name, last_name, medical_record_number))
-          `)
-          .order('created_at', { ascending: false })
           .limit(5)
       ]);
-
-      if (patientsResult.error) throw patientsResult.error;
-      if (hospitalizationsResult.error) throw hospitalizationsResult.error;
-      if (emergenciesResult.error) throw emergenciesResult.error;
-      if (consultationsResult.error) throw consultationsResult.error;
-      if (prescriptionsResult.error) throw prescriptionsResult.error;
-      if (recentHospitalizationsResult.error) throw recentHospitalizationsResult.error;
-      if (recentEmergenciesResult.error) throw recentEmergenciesResult.error;
-      if (recentConsultationsResult.error) throw recentConsultationsResult.error;
-      if (recentPrescriptionsResult.error) throw recentPrescriptionsResult.error;
 
       setStats({
         totalPatients: patientsResult.count || 0,
         activeHospitalizations: hospitalizationsResult.count || 0,
         pendingEmergencies: emergenciesResult.count || 0,
         pendingConsultations: consultationsResult.count || 0,
-        newPrescriptions: prescriptionsResult.count || 0
+        todayAppointments: appointmentsResult.count || 0
       });
 
-      // Transformer les données pour correspondre aux interfaces TypeScript
-      // En Supabase, les jointures peuvent retourner des tableaux d'objets au lieu d'objets uniques
-      
-      // Transformer les hospitalisations récentes
-      const transformedHospitalizations: Hospitalization[] = (recentHospitalizationsResult.data || []).map((hosp: any) => ({
-        id: hosp.id,
-        patient_id: hosp.patient_id,
-        admission_date: hosp.admission_date,
-        discharge_date: hosp.discharge_date,
-        admission_reason: hosp.admission_reason,
-        patient: Array.isArray(hosp.patient) && hosp.patient.length > 0 ? hosp.patient[0] : hosp.patient,
-      }));
-      
-      // Transformer les urgences récentes
-      const transformedEmergencies: Emergency[] = (recentEmergenciesResult.data || []).map((emerg: any) => ({
-        id: emerg.id,
-        patient_id: emerg.patient_id,
-        admission_time: emerg.admission_time,
-        triage_level: emerg.triage_level,
-        reason: emerg.reason,
-        patient: Array.isArray(emerg.patient) && emerg.patient.length > 0 ? emerg.patient[0] : emerg.patient,
-      }));
-      
-      // Transformer les consultations récentes
-      const transformedConsultations: Consultation[] = (recentConsultationsResult.data || []).map((cons: any) => ({
-        id: cons.id,
-        patient_id: cons.patient_id,
-        date: cons.date,
-        status: cons.status,
-        reason_for_visit: cons.reason_for_visit,
-        patient: Array.isArray(cons.patient) && cons.patient.length > 0 ? cons.patient[0] : cons.patient,
-      }));
-      
-      // Transformer les prescriptions récentes
-      const transformedPrescriptions: Prescription[] = (recentPrescriptionsResult.data || []).map((presc: any) => ({
-        id: presc.id,
-        created_at: presc.created_at,
-        medication_name: presc.medication_name,
-        patient: Array.isArray(presc.consultation) && presc.consultation.length > 0 && presc.consultation[0].patient 
-          ? presc.consultation[0].patient 
-          : { id: '', first_name: '', last_name: '', medical_record_number: '' },
-      }));
+      setRecentHospitalizations((hospitalizationsData.data || []).map((h: any) => ({
+        ...h,
+        patient: h.patients
+      })));
+      setRecentEmergencies((emergenciesData.data || []).map((e: any) => ({
+        ...e,
+        patient: e.patients
+      })));
+      setRecentConsultations((consultationsData.data || []).map((c: any) => ({
+        ...c,
+        patient: c.patients
+      })));
 
-      setRecentHospitalizations(transformedHospitalizations);
-      setRecentEmergencies(transformedEmergencies);
-      setRecentConsultations(transformedConsultations);
-      setRecentPrescriptions(transformedPrescriptions);
     } catch (error: any) {
-      console.error('Erreur lors de la récupération des données du tableau de bord:', error);
+      console.error('Erreur lors de la récupération des données:', error);
+      const errorMessage = error.message || "Erreur lors de la récupération des données du tableau de bord";
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  const getTriageColor = (level: string) => {
-    switch (level) {
-      case 'IMMEDIATE': return 'bg-red-100 text-red-800 border-red-200';
-      case 'URGENT': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'DELAYED': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'LOW': return 'bg-green-100 text-green-800 border-green-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  const getTriageLabel = (level: string) => {
-    switch (level) {
-      case 'IMMEDIATE': return 'Immédiat (Rouge)';
-      case 'URGENT': return 'Urgent (Orange)';
-      case 'DELAYED': return 'Différé (Jaune)';
-      case 'LOW': return 'Bas (Vert)';
-      default: return level;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'PENDING': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'ONGOING': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'COMPLETED': return 'bg-green-100 text-green-800 border-green-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
+  const statCards = [
+    {
+      title: "Patients Total",
+      value: stats.totalPatients,
+      description: "Patients enregistrés",
+      icon: Users,
+      color: "bg-blue-500",
+      trend: "+12% ce mois",
+    },
+    {
+      title: "Hospitalisations",
+      value: stats.activeHospitalizations,
+      description: "En cours",
+      icon: Bed,
+      color: "bg-purple-500",
+      trend: "+3 depuis hier",
+    },
+    {
+      title: "Urgences",
+      value: stats.pendingEmergencies,
+      description: "En attente de traitement",
+      icon: AlertTriangle,
+      color: "bg-red-500",
+      trend: "Prioritaire",
+    },
+    {
+      title: "Consultations",
+      value: stats.pendingConsultations,
+      description: "En cours ou en attente",
+      icon: Activity,
+      color: "bg-green-500",
+      trend: "Aujourd'hui",
+    },
+    {
+      title: "Rendez-vous",
+      value: stats.todayAppointments,
+      description: "Programmés aujourd'hui",
+      icon: Calendar,
+      color: "bg-gold",
+      trend: "Aujourd'hui",
+    },
+  ];
 
   if (loading) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Tableau de Bord Médical</h1>
-          <p className="text-muted-foreground">Vue d'ensemble de l'activité médicale</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Tableau de Bord Médical</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">Vue d'ensemble de l'activité médicale</p>
         </div>
-        <Card>
+        <Card className="border-gray-200 dark:border-gray-800">
           <CardContent className="flex items-center justify-center h-64">
-            <p>Chargement du tableau de bord...</p>
+            <p className="text-gray-600 dark:text-gray-400">Chargement...</p>
           </CardContent>
         </Card>
       </div>
@@ -301,218 +213,277 @@ export function DashboardOverview() {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <ErrorDisplay
+          title="Erreur de chargement"
+          message={error}
+          type="error"
+          onRetry={() => {
+            setLoading(true);
+            fetchDashboardData();
+          }}
+          onDismiss={() => setError(null)}
+        />
+      )}
+
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Tableau de Bord Médical</h1>
-        <p className="text-muted-foreground">Vue d'ensemble de l'activité médicale</p>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Tableau de Bord Médical</h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-2">Vue d'ensemble de l'activité médicale</p>
       </div>
 
       {/* Statistiques */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <Card className="md:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Total des patients</CardDescription>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalPatients}</div>
-            <p className="text-xs text-muted-foreground">+12% par rapport au mois dernier</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Hospitalisations actives</CardDescription>
-            <Bed className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.activeHospitalizations}</div>
-            <p className="text-xs text-muted-foreground">+3 depuis hier</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Urgences en attente</CardDescription>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.pendingEmergencies}</div>
-            <p className="text-xs text-muted-foreground">Niveau de triage prioritaire</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Consultations en cours</CardDescription>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.pendingConsultations}</div>
-            <p className="text-xs text-muted-foreground">patients en attente</p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+        {statCards.map((stat, index) => {
+          const Icon = stat.icon;
+          return (
+            <Card key={index} className="border-gray-200 dark:border-gray-800 hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  {stat.title}
+                </CardTitle>
+                <div className={`w-10 h-10 rounded-lg ${stat.color} flex items-center justify-center`}>
+                  <Icon className="w-5 h-5 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
+                  {stat.value}
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                  {stat.description}
+                </p>
+                <div className="flex items-center text-xs text-green-600 dark:text-green-400">
+                  <TrendingUp className="w-3 h-3 mr-1" />
+                  {stat.trend}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Sections principales */}
       <div className="grid gap-6 md:grid-cols-2">
         {/* Hospitalisations récentes */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">Hospitalisations récentes</CardTitle>
-            <Button variant="outline" size="sm" onClick={() => router.push('/hospitalizations')}>
-              Voir tout
-            </Button>
+        <Card className="border-gray-200 dark:border-gray-800 shadow-sm">
+          <CardHeader className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl text-gray-900 dark:text-white">Hospitalisations récentes</CardTitle>
+                <CardDescription className="text-gray-600 dark:text-gray-400">
+                  {recentHospitalizations.length} hospitalisation{recentHospitalizations.length > 1 ? 's' : ''}
+                </CardDescription>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => router.push('/hospitalizations')}
+                className="hover:bg-gold/10 hover:text-gold hover:border-gold"
+              >
+                Voir tout
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {recentHospitalizations.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentHospitalizations.map((hosp) => (
-                    <TableRow key={hosp.id}>
-                      <TableCell>
-                        <div className="font-medium">
-                          {hosp.patient.first_name} {hosp.patient.last_name}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {hosp.patient.medical_record_number}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {format(new Date(hosp.admission_date), 'dd MMM', { locale: fr })}
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gray-50 dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-900">
+                      <TableHead className="font-semibold text-gray-900 dark:text-white">Patient</TableHead>
+                      <TableHead className="font-semibold text-gray-900 dark:text-white">Date</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {recentHospitalizations.map((hosp) => (
+                      <TableRow key={hosp.id} className="hover:bg-hover dark:hover:bg-gray-800 cursor-pointer" onClick={() => router.push(`/hospitalizations/${hosp.id}`)}>
+                        <TableCell>
+                          <div className="font-medium text-gray-900 dark:text-white">
+                            {hosp.patient?.first_name} {hosp.patient?.last_name}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {hosp.patient?.medical_record_number}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-gray-600 dark:text-gray-400">
+                          {format(new Date(hosp.admission_date), 'dd MMM yyyy', { locale: fr })}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             ) : (
-              <p className="text-muted-foreground text-center py-4">Aucune hospitalisation récente</p>
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                <Bed className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p className="text-sm">Aucune hospitalisation récente</p>
+              </div>
             )}
           </CardContent>
         </Card>
 
         {/* Urgences récentes */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">Urgences récentes</CardTitle>
-            <Button variant="outline" size="sm" onClick={() => router.push('/emergencies')}>
-              Voir tout
-            </Button>
+        <Card className="border-gray-200 dark:border-gray-800 shadow-sm">
+          <CardHeader className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl text-gray-900 dark:text-white">Urgences récentes</CardTitle>
+                <CardDescription className="text-gray-600 dark:text-gray-400">
+                  {recentEmergencies.length} urgence{recentEmergencies.length > 1 ? 's' : ''}
+                </CardDescription>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => router.push('/emergencies')}
+                className="hover:bg-gold/10 hover:text-gold hover:border-gold"
+              >
+                Voir tout
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {recentEmergencies.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Triage</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentEmergencies.map((emerg) => (
-                    <TableRow key={emerg.id}>
-                      <TableCell>
-                        <div className="font-medium">
-                          {emerg.patient.first_name} {emerg.patient.last_name}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getTriageColor(emerg.triage_level)}>
-                          {getTriageLabel(emerg.triage_level)}
-                        </Badge>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gray-50 dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-900">
+                      <TableHead className="font-semibold text-gray-900 dark:text-white">Patient</TableHead>
+                      <TableHead className="font-semibold text-gray-900 dark:text-white">Triage</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {recentEmergencies.map((emerg) => (
+                      <TableRow key={emerg.id} className="hover:bg-hover dark:hover:bg-gray-800 cursor-pointer" onClick={() => router.push(`/emergencies/${emerg.id}`)}>
+                        <TableCell>
+                          <div className="font-medium text-gray-900 dark:text-white">
+                            {emerg.patient?.first_name} {emerg.patient?.last_name}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={
+                            emerg.triage_level === 'IMMEDIATE' ? 'bg-red-500 text-white' :
+                            emerg.triage_level === 'URGENT' ? 'bg-orange-500 text-white' :
+                            emerg.triage_level === 'DELAYED' ? 'bg-yellow-500 text-white' :
+                            'bg-green-500 text-white'
+                          }>
+                            {emerg.triage_level === 'IMMEDIATE' ? 'Immédiat' :
+                             emerg.triage_level === 'URGENT' ? 'Urgent' :
+                             emerg.triage_level === 'DELAYED' ? 'Différé' : 'Bas'}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             ) : (
-              <p className="text-muted-foreground text-center py-4">Aucune urgence récente</p>
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                <AlertTriangle className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p className="text-sm">Aucune urgence récente</p>
+              </div>
             )}
           </CardContent>
         </Card>
 
         {/* Consultations récentes */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">Consultations récentes</CardTitle>
-            <Button variant="outline" size="sm" onClick={() => router.push('/consultations')}>
-              Voir tout
-            </Button>
+        <Card className="border-gray-200 dark:border-gray-800 shadow-sm">
+          <CardHeader className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl text-gray-900 dark:text-white">Consultations récentes</CardTitle>
+                <CardDescription className="text-gray-600 dark:text-gray-400">
+                  {recentConsultations.length} consultation{recentConsultations.length > 1 ? 's' : ''}
+                </CardDescription>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => router.push('/consultations')}
+                className="hover:bg-gold/10 hover:text-gold hover:border-gold"
+              >
+                Voir tout
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {recentConsultations.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Statut</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentConsultations.map((cons) => (
-                    <TableRow key={cons.id}>
-                      <TableCell>
-                        <div className="font-medium">
-                          {cons.patient.first_name} {cons.patient.last_name}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getStatusColor(cons.status)}>
-                          {cons.status === 'PENDING' ? 'En attente' :
-                           cons.status === 'ONGOING' ? 'En cours' :
-                           'Terminée'}
-                        </Badge>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gray-50 dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-900">
+                      <TableHead className="font-semibold text-gray-900 dark:text-white">Patient</TableHead>
+                      <TableHead className="font-semibold text-gray-900 dark:text-white">Statut</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {recentConsultations.map((cons) => (
+                      <TableRow key={cons.id} className="hover:bg-hover dark:hover:bg-gray-800 cursor-pointer" onClick={() => router.push(`/consultations/${cons.id}`)}>
+                        <TableCell>
+                          <div className="font-medium text-gray-900 dark:text-white">
+                            {cons.patient?.first_name} {cons.patient?.last_name}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={
+                            cons.status === 'PENDING' ? 'bg-yellow-500 text-white' :
+                            cons.status === 'ONGOING' ? 'bg-blue-500 text-white' :
+                            'bg-green-500 text-white'
+                          }>
+                            {cons.status === 'PENDING' ? 'En attente' :
+                             cons.status === 'ONGOING' ? 'En cours' : 'Terminée'}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             ) : (
-              <p className="text-muted-foreground text-center py-4">Aucune consultation récente</p>
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                <Activity className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p className="text-sm">Aucune consultation récente</p>
+              </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Prescriptions récentes */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">Nouvelles ordonnances</CardTitle>
-            <Button variant="outline" size="sm" onClick={() => router.push('/prescriptions')}>
-              Voir tout
-            </Button>
+        {/* Actions rapides */}
+        <Card className="border-gray-200 dark:border-gray-800 shadow-sm">
+          <CardHeader className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+            <CardTitle className="text-xl text-gray-900 dark:text-white">Actions rapides</CardTitle>
+            <CardDescription className="text-gray-600 dark:text-gray-400">
+              Raccourcis vers les fonctionnalités principales
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            {recentPrescriptions.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Médicament</TableHead>
-                    <TableHead>Patient</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentPrescriptions.map((presc) => (
-                    <TableRow key={presc.id}>
-                      <TableCell className="font-medium">
-                        {presc.medication_name}
-                      </TableCell>
-                      <TableCell>
-                        {presc.patient && presc.patient.first_name && presc.patient.last_name
-                          ? `${presc.patient.first_name} ${presc.patient.last_name}`
-                          : "Patient inconnu"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="text-muted-foreground text-center py-4">Aucune nouvelle ordonnance</p>
-            )}
+          <CardContent className="p-6 space-y-2">
+            <Button 
+              variant="outline" 
+              className="w-full justify-start hover:bg-navy/10 hover:text-navy hover:border-navy dark:hover:bg-gold/10 dark:hover:text-gold dark:hover:border-gold"
+              onClick={() => router.push('/patients')}
+            >
+              <Users className="mr-2 h-4 w-4" />
+              Voir tous les patients
+            </Button>
+            <Button 
+              variant="outline" 
+              className="w-full justify-start hover:bg-navy/10 hover:text-navy hover:border-navy dark:hover:bg-gold/10 dark:hover:text-gold dark:hover:border-gold"
+              onClick={() => router.push('/consultations')}
+            >
+              <Activity className="mr-2 h-4 w-4" />
+              Nouvelle consultation
+            </Button>
+            <Button 
+              variant="outline" 
+              className="w-full justify-start hover:bg-navy/10 hover:text-navy hover:border-navy dark:hover:bg-gold/10 dark:hover:text-gold dark:hover:border-gold"
+              onClick={() => router.push('/prescriptions')}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Créer une ordonnance
+            </Button>
           </CardContent>
         </Card>
       </div>

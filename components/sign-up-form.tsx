@@ -128,7 +128,7 @@ export function SignUpForm({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ADMIN_SYS">Administrateur Système</SelectItem>
-                    <SelectItem value="GENERAL_DOCTOR">Médecin Généraliste</SelectItem>
+                    <SelectItem value="GENERAL_DOCTOR">Médecin Général</SelectItem>
                     <SelectItem value="DOCTOR">Médecin Spécialiste</SelectItem>
                     <SelectItem value="NURSE">Infirmier(ère)</SelectItem>
                     <SelectItem value="SECRETARY">Secrétaire Médicale</SelectItem>

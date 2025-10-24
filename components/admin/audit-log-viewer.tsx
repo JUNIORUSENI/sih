@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Calendar, Filter, User, Clock, Activity } from "lucide-react";
 import { toast } from "sonner";
+import { ErrorDisplay } from "@/components/ui/error-display";
 
 interface AuditLog {
   id: string;
@@ -29,6 +30,7 @@ export function AuditLogViewer() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [filteredLogs, setFilteredLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterAction, setFilterAction] = useState("all");
   const [filterResource, setFilterResource] = useState("all");
@@ -68,50 +70,25 @@ export function AuditLogViewer() {
 
   const fetchAuditLogs = async () => {
     try {
-      // Récupérer les logs d'audit
-      const { data: logsData, error: logsError } = await supabase
-        .from('audit_logs')
-        .select(`
-          id,
-          user_id,
-          action,
-          resource_type,
-          resource_id,
-          old_values,
-          new_values,
-          ip_address,
-          user_agent,
-          created_at
-        `)
-        .order('created_at', { ascending: false })
-        .limit(100); // Limiter à 100 derniers logs pour des raisons de performance
+      setError(null);
+      
+      // Récupérer les logs d'audit via l'API
+      const response = await fetch('/api/admin/audit-logs');
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Erreur de connexion au serveur' }));
+        throw new Error(errorData.error || 'Erreur lors de la récupération des logs d\'audit');
+      }
 
-      if (logsError) throw logsError;
-
-      // Récupérer les emails des utilisateurs séparément
-      const formattedLogs = await Promise.all(
-        (logsData || []).map(async (log) => {
-          let user_email = 'Utilisateur inconnu';
-          
-          if (log.user_id) {
-            const { data: userData, error: userError } = await supabase.auth.admin.getUserById(log.user_id);
-            if (!userError && userData?.user) {
-              user_email = userData.user.email || 'Utilisateur inconnu';
-            }
-          }
-          
-          return {
-            ...log,
-            user_email
-          };
-        })
-      );
-
-      setLogs(formattedLogs);
-      setFilteredLogs(formattedLogs);
+      const { logs: logsData } = await response.json();
+      
+      setLogs(logsData || []);
+      setFilteredLogs(logsData || []);
     } catch (error: any) {
       console.error('Erreur lors de la récupération des logs d\'audit:', error);
-      toast.error("Erreur lors de la récupération des logs d'audit");
+      const errorMessage = error.message || "Erreur lors de la récupération des logs d'audit";
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -173,12 +150,12 @@ export function AuditLogViewer() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Journal d'Audit</h1>
-          <p className="text-muted-foreground">Historique des actions du système</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Journal d'Audit</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">Historique des actions du système</p>
         </div>
-        <Card>
+        <Card className="border-gray-200 dark:border-gray-800">
           <CardContent className="flex items-center justify-center h-64">
-            <p>Chargement des logs d'audit...</p>
+            <p className="text-gray-600 dark:text-gray-400">Chargement des logs d'audit...</p>
           </CardContent>
         </Card>
       </div>
@@ -187,31 +164,48 @@ export function AuditLogViewer() {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <ErrorDisplay
+          title="Erreur de chargement"
+          message={error}
+          type="error"
+          onRetry={() => {
+            setLoading(true);
+            fetchAuditLogs();
+          }}
+          onDismiss={() => setError(null)}
+        />
+      )}
+      
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Journal d'Audit</h1>
-        <p className="text-muted-foreground">Historique des actions du système</p>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Journal d'Audit</h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-2">Historique des actions du système</p>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <CardTitle>Logs d'Audit</CardTitle>
-            <CardDescription>Détails des actions effectuées dans le système</CardDescription>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="relative">
-              <Filter className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher dans les logs..."
-                className="pl-8"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+      <Card className="border-gray-200 dark:border-gray-800 shadow-sm">
+        <CardHeader className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+          <div className="flex flex-col md:flex-row gap-4 md:items-center md:justify-between">
+            <div>
+              <CardTitle className="text-xl text-gray-900 dark:text-white">Logs d'Audit</CardTitle>
+              <CardDescription className="text-gray-600 dark:text-gray-400">
+                {filteredLogs.length} log{filteredLogs.length > 1 ? 's' : ''} trouvé{filteredLogs.length > 1 ? 's' : ''}
+              </CardDescription>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative">
+                <Filter className="absolute left-2 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Rechercher..."
+                  className="pl-8 border-gray-200 dark:border-gray-700"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           <div className="flex flex-wrap gap-4 mb-4">
             <div className="flex-1 min-w-[200px]">
               <Select value={filterAction} onValueChange={setFilterAction}>
@@ -245,26 +239,26 @@ export function AuditLogViewer() {
             </div>
           </div>
 
-          <div className="rounded-md border">
+          <div className="rounded-md border border-gray-200 dark:border-gray-800 overflow-hidden">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Utilisateur</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Resource</TableHead>
-                  <TableHead>IP</TableHead>
-                  <TableHead>Date</TableHead>
+                <TableRow className="bg-gray-50 dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-900">
+                  <TableHead className="font-semibold text-gray-900 dark:text-white">Utilisateur</TableHead>
+                  <TableHead className="font-semibold text-gray-900 dark:text-white">Action</TableHead>
+                  <TableHead className="font-semibold text-gray-900 dark:text-white">Type</TableHead>
+                  <TableHead className="font-semibold text-gray-900 dark:text-white">Resource</TableHead>
+                  <TableHead className="font-semibold text-gray-900 dark:text-white">IP</TableHead>
+                  <TableHead className="font-semibold text-gray-900 dark:text-white">Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredLogs.length > 0 ? (
                   filteredLogs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell className="font-medium">
+                    <TableRow key={log.id} className="hover:bg-hover dark:hover:bg-gray-800 transition-colors">
+                      <TableCell className="font-medium text-gray-900 dark:text-white">
                         <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          {log.user_email}
+                          <User className="h-4 w-4 text-gray-400" />
+                          <span className="text-sm">{log.user_email}</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -277,15 +271,15 @@ export function AuditLogViewer() {
                           {getResourceLabel(log.resource_type)}
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-mono text-xs">{log.resource_id}</TableCell>
+                      <TableCell className="font-mono text-xs text-gray-600 dark:text-gray-400">{log.resource_id.slice(0, 8)}...</TableCell>
                       <TableCell>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-gray-600 dark:text-gray-400">
                           {log.ip_address || 'N/A'}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1 text-sm">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
+                        <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
+                          <Clock className="h-4 w-4" />
                           {formatDate(log.created_at)}
                         </div>
                       </TableCell>
@@ -293,20 +287,16 @@ export function AuditLogViewer() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      Aucun log d'audit trouvé avec les filtres actuels.
+                    <TableCell colSpan={6} className="text-center py-12 text-gray-500 dark:text-gray-400">
+                      <Activity className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p className="text-lg font-medium mb-2">Aucun log trouvé</p>
+                      <p className="text-sm">Aucun log d'audit ne correspond aux filtres actuels.</p>
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
-          
-          {filteredLogs.length === 0 && logs.length > 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              Aucun log ne correspond aux filtres appliqués.
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>

@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { isAuthenticated, hasAnyRole } from "@/lib/auth-actions";
-import { MedicalLayout } from "@/components/medical/medical-layout";
 import { PrescriptionManagement } from "@/components/medical/prescription-management";
 
 export default async function PrescriptionsPage() {
@@ -12,9 +11,5 @@ export default async function PrescriptionsPage() {
     redirect("/auth/login");
   }
 
-  return (
-    <MedicalLayout>
-      <PrescriptionManagement />
-    </MedicalLayout>
-  );
+  return <PrescriptionManagement />;
 }

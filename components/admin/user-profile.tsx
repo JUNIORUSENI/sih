@@ -198,7 +198,7 @@ export function UserProfile({ userId }: { userId: string }) {
               <p className="text-sm text-muted-foreground mb-2">Rôle principal</p>
               <Badge variant="outline">
                 {user.profile.role === 'ADMIN_SYS' ? 'Administrateur Système' :
-                 user.profile.role === 'GENERAL_DOCTOR' ? 'Médecin Généraliste' :
+                 user.profile.role === 'GENERAL_DOCTOR' ? 'Médecin Général' :
                  user.profile.role === 'DOCTOR' ? 'Médecin Spécialiste' :
                  user.profile.role === 'NURSE' ? 'Infirmier(ère)' :
                  user.profile.role === 'SECRETARY' ? 'Secrétaire Médicale' : user.profile.role}

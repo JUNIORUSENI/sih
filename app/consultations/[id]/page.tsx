@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { isAuthenticated, hasAnyRole } from "@/lib/auth-actions";
-import { SecretaryLayout } from "@/components/secretary/secretary-layout";
 import { ConsultationDetail } from "@/components/medical/consultation-detail";
 
 export default async function ConsultationPage({ params }: { params: { id: string } }) {
@@ -12,9 +11,5 @@ export default async function ConsultationPage({ params }: { params: { id: strin
     redirect("/auth/login");
   }
 
-  return (
-    <SecretaryLayout>
-      <ConsultationDetail consultationId={params.id} />
-    </SecretaryLayout>
-  );
+  return <ConsultationDetail consultationId={params.id} />;
 }
